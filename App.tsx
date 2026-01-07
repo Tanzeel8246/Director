@@ -22,6 +22,9 @@ const App: React.FC = () => {
   const [customLanguage, setCustomLanguage] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Keep track of options for each step to allow back navigation without re-fetching
+  const [optionsHistory, setOptionsHistory] = useState<Record<number, DynamicOption[]>>({});
+
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [step]);
@@ -61,6 +64,7 @@ const App: React.FC = () => {
     try {
       const fetchedOptions = await getDynamicOptions(state.productName || "Product", 'styles', base64Image);
       setOptions(fetchedOptions);
+      setOptionsHistory(prev => ({ ...prev, [Step.STYLE_SELECTION]: fetchedOptions }));
       setStep(Step.STYLE_SELECTION);
     } catch (err) {
       setError("Something went wrong. Please try again.");
@@ -77,11 +81,13 @@ const App: React.FC = () => {
         setState(prev => ({ ...prev, selectedStyle: selection }));
         const fetched = await getDynamicOptions(state.productName || "Product", 'audience', base64Image);
         setOptions(fetched);
+        setOptionsHistory(prev => ({ ...prev, [Step.AUDIENCE_SELECTION]: fetched }));
         setStep(Step.AUDIENCE_SELECTION);
       } else if (currentStep === Step.AUDIENCE_SELECTION) {
         setState(prev => ({ ...prev, selectedAudience: selection }));
         const fetched = await getDynamicOptions(state.productName || "Product", 'tone', base64Image);
         setOptions(fetched);
+        setOptionsHistory(prev => ({ ...prev, [Step.VO_TONE_SELECTION]: fetched }));
         setStep(Step.VO_TONE_SELECTION);
       } else if (currentStep === Step.VO_TONE_SELECTION) {
         setState(prev => ({ ...prev, selectedTone: selection }));
@@ -117,6 +123,16 @@ const App: React.FC = () => {
     }
   };
 
+  const goBack = () => {
+    const prevStep = step - 1;
+    if (prevStep >= Step.PRODUCT_INPUT) {
+      setStep(prevStep);
+      if (optionsHistory[prevStep]) {
+        setOptions(optionsHistory[prevStep]);
+      }
+    }
+  };
+
   const copyMasterPrompt = (clip: CommercialClip) => {
     const master = `SCENE: ${clip.clipNumber}\nSEED: ${clip.globalSeed}\nVISUAL: ${clip.visualDescription}\nTEXT ON SCREEN: ${clip.visualTextEnglish}\nVO SCRIPT: ${clip.voScriptUrdu}`;
     navigator.clipboard.writeText(master);
@@ -131,6 +147,7 @@ const App: React.FC = () => {
     setStep(Step.PRODUCT_INPUT);
     setState({ productName: '', niche: '', selectedStyle: '', selectedAudience: '', selectedTone: '', selectedLanguage: '', clips: [] });
     setOptions([]);
+    setOptionsHistory({});
     setBase64Image(undefined);
     setCustomLanguage('');
   };
@@ -160,6 +177,11 @@ const App: React.FC = () => {
 
       <header className="fixed top-0 left-0 w-full px-8 py-5 flex justify-between items-center z-50 glass">
         <div className="flex items-center gap-3">
+          {step > Step.PRODUCT_INPUT && step < Step.GENERATING && (
+            <button onClick={goBack} className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center transition-all mr-2">
+              <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"></path></svg>
+            </button>
+          )}
           <div className="w-8 h-8 bg-indigo-600 rounded-xl flex items-center justify-center font-bold shadow-lg shadow-indigo-500/30 text-white">D</div>
           <h1 className="text-lg font-extrabold tracking-tight text-white">Director <span className="text-indigo-500">Pro</span></h1>
         </div>
@@ -203,14 +225,17 @@ const App: React.FC = () => {
 
         {(step === Step.STYLE_SELECTION || step === Step.AUDIENCE_SELECTION || step === Step.VO_TONE_SELECTION) && (
           <div className="page-transition space-y-12 py-10">
-            <div className="space-y-4">
-              <span className="text-indigo-400 font-bold uppercase tracking-widest text-[10px]">
-                Step {step === Step.STYLE_SELECTION ? '2' : step === Step.AUDIENCE_SELECTION ? '3' : '4'} of 5
-              </span>
-              <h2 className="text-4xl sm:text-5xl font-extrabold text-white">
-                {step === Step.STYLE_SELECTION ? 'Pick a Style' : step === Step.AUDIENCE_SELECTION ? 'Who is it for?' : 'Voice Tone'}
-              </h2>
-              <p className="text-gray-400">Our AI suggests the highlighted one.</p>
+            <div className="flex justify-between items-start">
+              <div className="space-y-4">
+                <span className="text-indigo-400 font-bold uppercase tracking-widest text-[10px]">
+                  Step {step === Step.STYLE_SELECTION ? '2' : step === Step.AUDIENCE_SELECTION ? '3' : '4'} of 5
+                </span>
+                <h2 className="text-4xl sm:text-5xl font-extrabold text-white">
+                  {step === Step.STYLE_SELECTION ? 'Pick a Style' : step === Step.AUDIENCE_SELECTION ? 'Who is it for?' : 'Voice Tone'}
+                </h2>
+                <p className="text-gray-400">Our AI suggests the highlighted one.</p>
+              </div>
+              <button onClick={goBack} className="text-[10px] font-bold text-gray-500 hover:text-white uppercase tracking-widest bg-white/5 px-4 py-2 rounded-xl transition-all">Go Back</button>
             </div>
             <div className="grid sm:grid-cols-2 gap-6">
               {options.map((opt) => (
@@ -237,10 +262,13 @@ const App: React.FC = () => {
 
         {step === Step.VO_LANGUAGE_SELECTION && (
           <div className="page-transition space-y-12 py-10">
-            <div className="space-y-4">
-              <span className="text-indigo-400 font-bold uppercase tracking-widest text-[10px]">Step 5 of 5</span>
-              <h2 className="text-4xl sm:text-5xl font-extrabold text-white">Voiceover Script</h2>
-              <p className="text-gray-400">Which language should the AI use for the speech?</p>
+            <div className="flex justify-between items-start">
+              <div className="space-y-4">
+                <span className="text-indigo-400 font-bold uppercase tracking-widest text-[10px]">Step 5 of 5</span>
+                <h2 className="text-4xl sm:text-5xl font-extrabold text-white">Voiceover Script</h2>
+                <p className="text-gray-400">Which language should the AI use for the speech?</p>
+              </div>
+              <button onClick={goBack} className="text-[10px] font-bold text-gray-500 hover:text-white uppercase tracking-widest bg-white/5 px-4 py-2 rounded-xl transition-all">Go Back</button>
             </div>
             <div className="grid sm:grid-cols-2 gap-6">
               {['English', 'Urdu', 'Roman Urdu'].map((lang) => (
