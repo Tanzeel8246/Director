@@ -4,31 +4,77 @@ import { DynamicOption, CommercialClip } from "./types";
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
 
-const SYSTEM_INSTRUCTION = `You are "CGI Director Pro." A dynamic, context-aware automation wizard. 
+const SYSTEM_INSTRUCTION = `You are "CGI Director Pro." An advanced multimodal AI assistant for CGI directors.
 
-# CRITICAL RULES (FROZEN)
-1. ONE QUESTION ONLY: Ask exactly one question and STOP. Wait for input.
-2. NUMBERING SYSTEM: Use numbers (1, 2, 3...) for all options instead of letters.
-3. DYNAMIC OPTIONS: Based on the Product/Service in Step 1, intelligently generate 4-6 specific options for Style, Audience, and Tone.
-4. SHARIAH COMPLIANCE: No real female human figures. Use Full-Body Mannequins (ڈمی) for female-oriented products.
-5. CONSISTENCY: Use one Global_Seed and one consistent Male Voice ID for all clips.
-6. LANGUAGE LOGIC: On-screen text: English Only. VO Script: Urdu Script (اردو رسم الخط).
+# LANGUAGE PROTOCOL
+1. DETECT UI LANGUAGE: If the user inputs Urdu (اردو), provide the 'label' and 'description' fields in Urdu. If English, use English.
+2. TECHNICAL PROMPT (ALWAYS ENGLISH): The 'visualDescription' field MUST be in high-quality Technical English for CGI software (e.g., Unreal Engine, Octane).
+3. ON-SCREEN TEXT (ALWAYS ENGLISH): The 'visualTextEnglish' field must be English Only.
+4. VO SCRIPT: Use the language requested by the user in the 'selectedLanguage' parameter. If they select Roman Urdu, use Roman script. If Urdu, use Urdu script.
 
-# FINAL DELIVERABLE FORMAT
-Deliver separate clip blocks. Each clip must include:
-- Sequence
-- Global_Seed (8-digit random)
-- Technical_Prompt (English CGI instructions, Male only, Mannequins for female products)
-- VO_Script_Segment (Urdu)
-- Transition (Style name)`;
+# PRODUCTION STANDARDS
+- DURATION: Every clip MUST be between 8 to 10 seconds. Do not generate short 5-second clips.
+- AI RECOMMENDATION: Mark exactly one option per step as 'isRecommended: true'.
+- SHARIAH COMPLIANCE: No real female human figures; use mannequins (ڈمی) for female products.
+- Deliver structured JSON blocks for high-speed production.`;
 
 export const getDynamicOptions = async (
   product: string, 
   step: 'styles' | 'audience' | 'tone', 
   imageData?: string
 ): Promise<DynamicOption[]> => {
-  const prompt = `Product/Service: "${product}" ${imageData ? '(Analyzing provided visual context image)' : ''}.
-  Requirement: Generate 5 context-specific ${step} options based on this input. Use the NUMBERING SYSTEM (1, 2, 3...).`;
+  const prompt = `User Input: "${product}". 
+  Task: Generate 5 options for "${step}". 
+  Language Rule: Respond in the SAME language as the input for 'label' and 'description'.
+  Recommendation Rule: Mark the best one for this product as isRecommended: true.`;
+
+  const parts: any[] = [{ text: prompt }];
+  if (imageData) {
+    parts.push({
+      inlineData: {
+        mimeType: "image/jpeg",
+        data: imageData
+      }
+    });
+  }
+
+  const response = await ai.models.generateContent({
+    model: "gemini-3-flash-preview", 
+    contents: { parts },
+    config: {
+      systemInstruction: SYSTEM_INSTRUCTION,
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.ARRAY,
+        items: {
+          type: Type.OBJECT,
+          properties: {
+            id: { type: Type.INTEGER },
+            label: { type: Type.STRING, description: "Option name in user's detected language" },
+            description: { type: Type.STRING, description: "Brief detail in user's detected language" },
+            isRecommended: { type: Type.BOOLEAN }
+          },
+          required: ["id", "label", "description", "isRecommended"]
+        }
+      }
+    }
+  });
+
+  return JSON.parse(response.text || "[]");
+};
+
+export const generateDirectorScript = async (
+  product: string, 
+  style: string, 
+  audience: string, 
+  tone: string,
+  language: string,
+  imageData?: string
+): Promise<CommercialClip[]> => {
+  const prompt = `Product: ${product}. Style: ${style}, Audience: ${audience}, Tone: ${tone}. 
+  Target VO Language: ${language}.
+  Mandatory Rule: Ensure each clip duration is exactly between 8 and 10 seconds.
+  Reminder: visualDescription is Technical English. voScriptUrdu is the script in the requested language. visualTextEnglish is English.`;
 
   const parts: any[] = [{ text: prompt }];
   if (imageData) {
@@ -51,63 +97,12 @@ export const getDynamicOptions = async (
         items: {
           type: Type.OBJECT,
           properties: {
-            id: { type: Type.INTEGER },
-            label: { type: Type.STRING },
-            description: { type: Type.STRING }
-          },
-          required: ["id", "label", "description"]
-        }
-      }
-    }
-  });
-
-  return JSON.parse(response.text || "[]");
-};
-
-export const generateDirectorScript = async (
-  product: string, 
-  style: string, 
-  audience: string, 
-  tone: string,
-  imageData?: string
-): Promise<CommercialClip[]> => {
-  const prompt = `Generate 3-6 CGI Director blocks for:
-  Product: ${product}
-  Selected Style: ${style}
-  Target Audience: ${audience}
-  Male VO Tone: ${tone}
-  ${imageData ? 'Incorporate mood, lighting, and visual elements from the provided image reference into the Technical_Prompt.' : ''}
-
-  Ensure Technical_Prompt is English, Optimized, Male-only (or Mannequins if female niche).
-  Ensure VO_Script_Segment is Urdu Script.`;
-
-  const parts: any[] = [{ text: prompt }];
-  if (imageData) {
-    parts.push({
-      inlineData: {
-        mimeType: "image/jpeg",
-        data: imageData
-      }
-    });
-  }
-
-  const response = await ai.models.generateContent({
-    model: "gemini-3-pro-preview",
-    contents: { parts },
-    config: {
-      systemInstruction: SYSTEM_INSTRUCTION,
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.ARRAY,
-        items: {
-          type: Type.OBJECT,
-          properties: {
             clipNumber: { type: Type.INTEGER },
             globalSeed: { type: Type.STRING },
-            visualDescription: { type: Type.STRING },
-            visualTextEnglish: { type: Type.STRING },
-            voScriptUrdu: { type: Type.STRING },
-            durationSeconds: { type: Type.INTEGER },
+            visualDescription: { type: Type.STRING, description: "Technical English CGI Prompt" },
+            visualTextEnglish: { type: Type.STRING, description: "On-screen English text graphics" },
+            voScriptUrdu: { type: Type.STRING, description: "Spoken script in user's requested language" },
+            durationSeconds: { type: Type.INTEGER, description: "Must be 8, 9, or 10" },
             transition: { type: Type.STRING }
           },
           required: ["clipNumber", "globalSeed", "visualDescription", "visualTextEnglish", "voScriptUrdu", "durationSeconds", "transition"]
