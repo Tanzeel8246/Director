@@ -1,0 +1,8 @@
+{
+  "name": "CGI Director Pro",
+  "description": "A high-end CGI commercial director that creates multi-clip scripts with Urdu VO and English visuals, using AI-driven context-aware wizard steps. Supports image-to-concept generation.",
+  "requestFramePermissions": [
+    "microphone",
+    "camera"
+  ]
+}
